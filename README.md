@@ -1,0 +1,53 @@
+# Raphie Cold Email Generator
+
+A Node.js CLI that writes cold outreach emails for Raphie (customer service automation for iGaming and sports betting). It uses the OpenAI SDK and a go-to-market helper endpoint.
+
+## Setup
+
+```bash
+npm install
+```
+
+Create a `.env` file in the project root:
+
+```
+OPENAI_API_KEY=your-key-here
+# Optional, defaults to gpt-4o-mini
+# OPENAI_MODEL=gpt-4o-mini
+```
+
+Then run:
+
+```bash
+npm start
+```
+
+The CLI prompts for the recipient's name, company name, a short company description, and tone (`direct` or `warm`). Run the tests with `npm test`. They need no network access or API key.
+
+## How it works
+
+1. **Helper lookup** (`src/helper.js`): POSTs the company name to the helper endpoint with a 10 second timeout. 503s, other 5xx responses, timeouts and network errors are retried (3 attempts total, exponential backoff). 4xx responses and malformed payloads are not retried. If no usable response arrives, the app falls back to the description alone, so the helper never blocks email generation.
+2. **Confidence handling**: the confidence score decides how much of the helper response reaches the model (see below).
+3. **Generation** (`src/generate.js`): a system prompt carries Raphie's positioning, the required email elements, tone rules and the hard rules. The user prompt carries the CLI input plus the hints allowed by the confidence tier.
+4. **Constraint enforcement** (`src/constraints.js`): rules are checked in code, not just requested in the prompt.
+   - Automatic repair: em dashes become commas, and extra exclamation marks become periods.
+   - Validation: em dashes, the word "fantastic", sentences starting with "Furthermore" or "Additionally", more than one exclamation mark, consecutive sentences starting with the same word, and sentences over 30 words.
+   - If violations remain, the model is shown its own draft and the exact violations, then asked to rewrite. This repeats up to 4 rounds. If it still fails, the CLI prints the email, lists the remaining problems and exits with code 2.
+
+## Confidence thresholds and reasoning
+
+A wrong detail in a cold email (calling a supplier an operator, mentioning crypto to a company with no crypto exposure) is worse than a slightly generic email, because it signals the sender did not do their homework. So the helper is only trusted as far as its confidence supports.
+
+| Confidence | Tier | Behavior |
+|---|---|---|
+| 0.75 and above | high | All useful fields are passed to the model as reliable: company type, vertical, operating regions, support motion, KYC/AML intensity, and crypto (only when true, since `false` is noise). |
+| 0.4 to below 0.75 | medium | Only broad fields (vertical, company type) are passed. The model is told to phrase them tentatively ("from the outside", "looks like") and to trust the description if the two conflict. |
+| below 0.4 | low | Hints are discarded. The email is built from the description only. |
+| unavailable | none | Treated the same as low. |
+
+The cutoffs are judgment calls. At 0.75 and above, fine-grained details are more likely right than wrong. Below it, details can start to be a coin flip, and a wrong detail can cost more than laebing it out. Below 0.4, even broad classification stops being dependable. Both are constants at the top of `src/helper.js` and easy to tune.
+
+## Known limitations
+
+- The sentence splitter breaks on `.`, `!`, `?` and newlines, so abbreviations like "e.g." can cause false splits. This only makes the consecutive-starting-word check slightly stricter.
+- The greeting and sign-off lines count as sentences for the "same starting word" rule.

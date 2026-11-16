@@ -1,8 +1,11 @@
 const { buildHints } = require('./helper');
 const { validate, sanitize } = require('./constraints');
 
+// The model gets up to four chances to produce a valid email.
 const MAX_ROUNDS = 4;
 
+// High-level instructions for the LLM. These rules are strict enough that they
+// function as both writing guidance and a validation checklist.
 const SYSTEM_PROMPT = `You write cold outreach emails on behalf of Raphie, a customer service automation product for the iGaming and sports betting ecosystem (operators, B2B suppliers, affiliates, payments, risk, data, compliance).
 
 Raphie helps support teams automate repetitive workflows, improve resolution time, deflect repetitive tickets, and guide human agents with suggested replies, while keeping clean handoffs and audit trails for sensitive cases.
@@ -43,6 +46,8 @@ Hard rules, never break them:
 
 Output only the email body. No subject line, no commentary, no markdown.`;
 
+// Turn the user input and optional company-analysis hints into a single prompt for
+// the chat model. This keeps the prompt structure consistent across retries.
 function buildUserPrompt({ name, company, description, tone }, hintsContext) {
   const parts = [
     `Recipient: ${name}`,
@@ -58,6 +63,9 @@ function buildUserPrompt({ name, company, description, tone }, hintsContext) {
   return parts.join('\n');
 }
 
+// Generate a cold email and keep retrying until the draft is compliant or the
+// round limit is reached. Each failed attempt adds the prior draft and its rule
+// violations back into the conversation so the model can self-correct.
 async function generateEmail(client, input, analysis, { model } = {}) {
   const { tier, context } = buildHints(analysis);
   const messages = [

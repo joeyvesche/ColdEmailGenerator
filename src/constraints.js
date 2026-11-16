@@ -1,3 +1,5 @@
+// Hard constraints that the final cold email must obey. These checks are cheaper
+// and more deterministic than trying to reason about them in the language model.
 const MAX_WORDS = 30;
 
 const BANNED_PHRASES = [
@@ -13,6 +15,8 @@ const BANNED_PHRASES = [
   'caught my eye',
 ];
 
+// Split natural-language text into sentence-like chunks so the validation logic can
+// check each one individually without depending on a full parser.
 function splitSentences(text) {
   return text
     .split(/(?<=[.!?])\s+|\n+/)
@@ -25,7 +29,8 @@ function firstWord(sentence) {
   return m ? m[0].toLowerCase() : '';
 }
 
-// Deterministic fixes that don't need the model.
+// Deterministic fixes that do not require another model round. These changes are
+// intentionally narrow and safe.
 function sanitize(text) {
   let out = text.replace(/\s*[\u2014\u2015]\s*/g, ', ');
   let seen = false;
@@ -39,7 +44,8 @@ function sanitize(text) {
   return out.trim();
 }
 
-// Returns a list of violations (empty if clean).
+// Returns a list of violations (empty if clean). This is the gate that decides
+// whether the draft is acceptable or should be rewritten.
 function validate(text, input) {
   const problems = [];
 

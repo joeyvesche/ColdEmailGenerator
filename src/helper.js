@@ -1,6 +1,8 @@
+// Endpoint for the external enrichment helper that tries to infer company context.
 const ENDPOINT =
   'https://code-challenge-basic-463015353641.us-central1.run.app/company-analysis';
 
+// The helper is intentionally conservative: keep requests short and fail softly.
 const TIMEOUT_MS = 10000;
 const MAX_ATTEMPTS = 3;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -15,6 +17,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * - < 0.4   low:    treat as noise, rely on the user's description only.
  * A failed or missing response is handled like low.
  */
+// Confidence tells us whether company hints are trustworthy enough to influence the
+// draft. A lower score means the model should lean on the user's description only.
 const HIGH = 0.75;
 const MEDIUM = 0.4;
 
@@ -29,7 +33,8 @@ function isUsable(data) {
   return data && typeof data === 'object' && typeof data.confidence === 'number';
 }
 
-// Never throws. Returns null if no usable response, so the caller can fall back.
+// Never throws. Returns null if no usable response, so the caller can safely use
+// the user description as the primary source of truth.
 async function fetchCompanyAnalysis(name, { fetchImpl = fetch, log = () => {} } = {}) {
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
@@ -59,6 +64,8 @@ async function fetchCompanyAnalysis(name, { fetchImpl = fetch, log = () => {} } 
   return null;
 }
 
+// Friendly labels make the internal metadata readable when it is added into the
+// prompt sent to the model.
 const COMPANY_TYPE_LABELS = {
   operator: 'a betting/gaming operator that serves players directly',
   b2b: 'a B2B platform or supplier that serves operators',
@@ -75,6 +82,8 @@ const SUPPORT_MOTION_LABELS = {
 
 const humanize = (v) => String(v).replace(/_/g, ' ');
 
+// Convert the helper payload into language that is useful to the generator while
+// respecting the confidence tiers. Low-confidence signals are discarded.
 function buildHints(data) {
   const tier = data ? tierFor(data.confidence) : 'none';
   if (tier === 'low' || tier === 'none') return { tier, context: '' };

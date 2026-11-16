@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline/promises');
 
-// Tiny .env loader so no extra dependency is needed.
+// Minimal .env support keeps the CLI simple and avoids adding a dependency.
 function loadEnv() {
   const file = path.join(__dirname, '..', '.env');
   if (!fs.existsSync(file)) return;
@@ -13,6 +13,8 @@ function loadEnv() {
   }
 }
 
+// Re-ask until the user provides a real value; this makes the interactive prompt
+// resilient to blank responses.
 async function ask(rl, question) {
   while (true) {
     const answer = (await rl.question(question)).trim();
@@ -21,6 +23,7 @@ async function ask(rl, question) {
   }
 }
 
+// Keep the tone input constrained to the two supported variants.
 async function askTone(rl) {
   while (true) {
     const answer = (await rl.question('Tone (direct/warm): ')).trim().toLowerCase();
@@ -29,6 +32,8 @@ async function askTone(rl) {
   }
 }
 
+// Main CLI flow: load configuration, prompt the user, fetch company hints, then
+// generate and print the final email.
 async function main() {
   loadEnv();
 
